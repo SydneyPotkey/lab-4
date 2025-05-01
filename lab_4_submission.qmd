@@ -1,0 +1,229 @@
+---
+title: "lab 4 stat 541"
+author: "Sydney Potkey"
+format: 
+  dashboard:
+    orientation: columns
+    logo: images/download.png
+    nav-buttons: 
+      - icon: github
+        href: https://github.com/SydneyPotkey
+        aria-label: GitHub
+      - icon: envelope
+        href: "mailto:sydneygp72@gmail.com"
+        aria-label: Email
+server: shiny
+embed-resources: false
+---
+
+```{r}
+#| context: setup
+#| label: load packages
+#| message: false
+
+
+library(tidyverse)
+library(shiny)
+library(plotly)
+library(data.table)
+library(sf)
+library(scales)
+library(gt)
+library(leaflet)
+library(data.table)
+library(sf)
+library(RColorBrewer)
+library(rnaturalearth)
+library(rnaturalearthhires) 
+library(viridis)
+library(readr)
+library(shinydashboard)
+#graph color pallette
+
+cbp2 <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442",
+          "#0072B2", "#D55E00", "#CC79A7", "#999999")
+
+
+
+
+```
+
+
+```{r}
+#| context: setup
+compare <- read_csv("data/compare.csv")
+compare_sci <- read_csv("data/compare_sci.csv")
+graph_data <- read_csv("data/graph_data.csv")
+science_percent <- read_csv("data/percent_science.csv")
+joined <- read_csv("data/join.csv")
+
+
+highest_age <- joined |>
+  group_by(Age) |>
+  summarise(
+    total = n(),
+    strongly_agree = sum(Q25 == 1, na.rm = TRUE),
+    percent_strongly_agree = strongly_agree / total) |>
+  filter(total > 0) |>
+  arrange(desc(percent_strongly_agree)) |>
+  slice(1) |>
+  pull(Age)
+
+
+
+
+```
+
+
+# Dashboard
+
+
+### Sidebar {.sidebar}
+```{r}
+
+
+  
+  checkboxGroupInput('region', 'Select Regions:',
+                     choices = unique(graph_data$region),
+                     selected = unique(graph_data$region))
+
+  sliderInput('Age', 'Select Age Range:',
+             min = 15, max = 98,
+             value = c(15, 98))
+
+
+
+```
+
+
+
+
+```{r}
+#| context: server
+  
+ 
+  filtered_data <- reactive({
+    graph_data |>
+      filter(Age >= input$Age[1], 
+        Age <= input$Age[2],
+        region %in% input$region)
+  })
+  
+  # Plot output
+  output$plot_name <- renderPlot({
+    p <- ggplot(filtered_data(), aes(
+      x = country,
+      y = percent_agree / 100,
+      color = region)) +
+      geom_point(size = 2, alpha = 0.5)
+    
+
+    p +
+      facet_wrap(~region, scales = "free_x") +
+      theme_light() +
+      labs(
+        x = NULL,
+        y = "Percent Agree",
+        title = "Belief That Vaccines Are Safe by Region and Country",
+        subtitle = "Filtered by Age and Region"
+      ) +
+      scale_color_manual(values = cbp2) +
+      scale_y_continuous(labels = percent) +
+      theme(
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        legend.position = "none",
+        plot.title = element_text(face = "bold"))
+  })
+  
+
+```
+
+## Column - Graphs {width="65%"}
+
+### Row - Scatter
+```{r}
+plotOutput('plot_name')
+
+```
+
+## Column - Highest {width="35%"}
+
+
+#### Row - Value Boxes {height="30%"}
+
+```{r}
+#| label: highest age
+
+ value <- list(value = paste(highest_age, "years"))
+
+
+```
+
+:::{.valuebox icon="heart-pulse" color="#ccdcfd"}
+Age with Highest Belief in Vaccines:
+
+`{r} value`
+:::
+
+
+### Row - Tables by Country {height="70%" .tabset}
+
+#### Highest Percent Vaccine
+```{r}
+#| title: Highest Percent Vaccines
+
+compare_unique <- compare |>
+  group_by(country) |>
+  summarise(
+    `% Believe in Vaccines` = round(mean(`% Believe in Vaccines`)),
+    `% Studied Science` = round(mean(`% Studied Science`)),
+    .groups = 'drop'
+  )
+
+compare_unique |>
+  gt() |>
+  cols_align(align = "left", columns = "country") |>
+  data_color(
+    columns = c(`% Studied Science`, `% Believe in Vaccines`),
+    method = "numeric",
+    palette = viridis(8, option = "mako")  # Direct use of viridis() here
+  )
+
+
+```
+
+
+#### Highest Percent Studied
+```{r}
+#| title: Highest Percent Studied
+
+sci_unique <- compare_sci |>
+  group_by(country) |>
+  summarise(
+    `% Believe in Vaccines` = round(mean(`% Believe in Vaccines`)),
+    `% Studied Science` = round(mean(`% Studied Science`)),
+    .groups = 'drop') |>
+  arrange(desc(`% Studied Science`))
+
+sci_unique |>
+  gt() |>
+  cols_align(align = "left", columns = "country") |>
+  data_color(
+    columns = c(`% Studied Science`, `% Believe in Vaccines`),
+    method = "numeric",
+    palette = viridis(8, option = "mako")  # Direct use of viridis() here
+  )
+
+
+```
+
+# Data 
+```{r}
+
+graph_data |>
+  gt()
+
+```
